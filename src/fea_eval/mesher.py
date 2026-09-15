@@ -1,7 +1,11 @@
 from pathlib import Path
 
 import gmsh
+import numpy as np
 from loguru import logger
+
+from fea_eval.config import MeshConfig
+from fea_eval.step import StepFaces
 
 
 class Mesher:
@@ -12,7 +16,16 @@ class Mesher:
     VOLUME = "solid"
 
     @classmethod
-    def mesh(cls, step_file: Path, msh_file: Path, mesh_size: float | None = None) -> Path:
+    def mesh(
+        cls,
+        step_file: Path,
+        msh_file: Path,
+        fixed_faces: list[int],
+        load_faces: list[int],
+        mesh: MeshConfig,
+    ) -> Path:
+        step_vertices, step_all = StepFaces.vertices(step_file, fixed_faces + load_faces)
+
         gmsh.initialize()
         try:
             gmsh.option.setNumber("General.Terminal", 0)
@@ -22,14 +35,16 @@ class Mesher:
             gmsh.model.occ.importShapes(str(step_file))
             gmsh.model.occ.synchronize()
 
-            fixed, load = cls._select_end_faces()
-            gmsh.model.addPhysicalGroup(2, [fixed], name=cls.FIXED)
-            gmsh.model.addPhysicalGroup(2, [load], name=cls.LOAD)
+            surfaces = cls._match_surfaces(step_vertices, step_all)
+            for name, ids in ((cls.FIXED, fixed_faces), (cls.LOAD, load_faces)):
+                tags = [surfaces[i] for i in ids]
+                logger.info("{} faces: {}", name, ", ".join(f"#{i} -> surface {surfaces[i]}" for i in ids))
+                gmsh.model.addPhysicalGroup(2, tags, name=name)
             volumes = [tag for _, tag in gmsh.model.getEntities(3)]
             gmsh.model.addPhysicalGroup(3, volumes, name=cls.VOLUME)
 
-            if mesh_size is not None:
-                gmsh.option.setNumber("Mesh.MeshSizeMax", mesh_size)
+            gmsh.option.setNumber("Mesh.MeshSizeMin", mesh.size_min)
+            gmsh.option.setNumber("Mesh.MeshSizeMax", mesh.size_max)
             gmsh.model.mesh.generate(3)
             logger.info("Meshed {} nodes", len(gmsh.model.mesh.getNodes()[0]))
 
@@ -39,27 +54,32 @@ class Mesher:
             gmsh.finalize()
 
     @staticmethod
-    def _select_end_faces() -> tuple[int, int]:
-        """Pick the faces at the min/max ends of the part's longest axis.
+    def _match_surfaces(step_vertices: dict[int, np.ndarray], step_all: np.ndarray) -> dict[int, int]:
+        """Map STEP face IDs to gmsh surface tags by comparing their vertex sets.
 
-        Placeholder until the STEP carries named faces.
+        gmsh doesn't keep STEP entity IDs, but a face's corners identify it.
         """
-        xmin, ymin, zmin, xmax, ymax, zmax = gmsh.model.getBoundingBox(-1, -1)
-        lo, hi = (xmin, ymin, zmin), (xmax, ymax, zmax)
-        axis = max(range(3), key=lambda i: hi[i] - lo[i])
-        tol = 1e-3 * (hi[axis] - lo[axis])  # OCC boxes are padded
+        gmsh_all = np.array([gmsh.model.getValue(0, tag, []) for _, tag in gmsh.model.getEntities(0)])
+        span = np.ptp(gmsh_all, axis=0).max()
+        scale = span / np.ptp(step_all, axis=0).max()  # STEP file units -> meters
+        tol = 1e-6 * span
 
-        def at(value: float) -> int:
-            matches = [
-                tag
-                for _, tag in gmsh.model.getEntities(2)
-                if abs((box := gmsh.model.getBoundingBox(2, tag))[axis] - value) < tol
-                and abs(box[axis + 3] - value) < tol
-            ]
+        surface_vertices = {
+            tag: np.array(
+                [gmsh.model.getValue(0, p, []) for _, p in gmsh.model.getBoundary([(2, tag)], combined=False, recursive=True)]
+            )
+            for _, tag in gmsh.model.getEntities(2)
+        }
+
+        def same(a: np.ndarray, b: np.ndarray) -> bool:
+            d = np.linalg.norm(a[:, None] - b[None], axis=-1)
+            return len(np.unique(b, axis=0)) == len(a) and bool((d.min(axis=1) < tol).all())
+
+        result = {}
+        for face_id, verts in step_vertices.items():
+            verts = scale * verts
+            matches = [tag for tag, sv in surface_vertices.items() if same(verts, sv)]
             if len(matches) != 1:
-                raise RuntimeError(f"Expected one face at {'xyz'[axis]}={value}, got {matches}")
-            return matches[0]
-
-        fixed, load = at(lo[axis]), at(hi[axis])
-        logger.info("Fixed face {} at {}min, load face {} at {}max", fixed, "xyz"[axis], load, "xyz"[axis])
-        return fixed, load
+                raise RuntimeError(f"STEP face #{face_id} matched gmsh surfaces {matches}; expected exactly one")
+            result[face_id] = matches[0]
+        return result

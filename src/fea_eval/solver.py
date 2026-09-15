@@ -7,20 +7,20 @@ from dolfinx.fem.petsc import LinearProblem
 from loguru import logger
 from mpi4py import MPI
 
+from fea_eval.config import MaterialConfig, Vec3
 from fea_eval.mesher import Mesher
 
 
 class Solver:
-    """Linear elasticity: clamp one face, apply a uniform traction to another."""
+    """Linear elasticity: clamp some faces, spread a total force uniformly over others."""
 
     @classmethod
     def solve(
         cls,
         msh_file: Path,
         out_file: Path,
-        traction: tuple[float, float, float],
-        youngs_modulus: float,
-        poisson_ratio: float,
+        force: Vec3,
+        material: MaterialConfig,
         degree: int = 2,
     ) -> Path:
         data = io.gmsh.read_from_msh(msh_file, MPI.COMM_WORLD, rank=0, gdim=3)
@@ -35,8 +35,9 @@ class Solver:
         fixed_dofs = fem.locate_dofs_topological(V, fdim, facet_tags.find(fixed_tag))
         bc = fem.dirichletbc(np.zeros(3), fixed_dofs, V)
 
-        mu = youngs_modulus / (2 * (1 + poisson_ratio))
-        lmbda = youngs_modulus * poisson_ratio / ((1 + poisson_ratio) * (1 - 2 * poisson_ratio))
+        E, nu = material.youngs_modulus, material.poisson_ratio
+        mu = E / (2 * (1 + nu))
+        lmbda = E * nu / ((1 + nu) * (1 - 2 * nu))
 
         def sigma(w):
             eps = ufl.sym(ufl.grad(w))
@@ -44,7 +45,10 @@ class Solver:
 
         u, v = ufl.TrialFunction(V), ufl.TestFunction(V)
         ds = ufl.Measure("ds", domain=domain, subdomain_data=facet_tags)
-        t = fem.Constant(domain, np.asarray(traction, dtype=np.float64))
+        area = fem.assemble_scalar(fem.form(fem.Constant(domain, 1.0) * ds(load_tag)))
+        traction = np.asarray(force, dtype=np.float64) / area
+        logger.info("Load area {:.4e} m^2 -> traction {} Pa", area, np.array2string(traction, precision=4))
+        t = fem.Constant(domain, traction)
 
         a = ufl.inner(sigma(u), ufl.grad(v)) * ufl.dx
         L = ufl.dot(t, v) * ds(load_tag)
@@ -67,7 +71,7 @@ class Solver:
     def _write(uh: fem.Function, sigma, out_file: Path) -> None:
         domain = uh.function_space.mesh
 
-        # XDMF needs output on the mesh's own (P1) geometry.
+        # Output on the mesh's own (P1) geometry.
         u_out = fem.Function(fem.functionspace(domain, ("Lagrange", 1, (3,))), name="displacement")
         u_out.interpolate(uh)
 
@@ -78,8 +82,7 @@ class Solver:
         von_mises.interpolate(fem.Expression(ufl.sqrt(1.5 * ufl.inner(dev, dev)), W.element.interpolation_points))
         logger.info("Max von Mises: {:.4e} Pa", von_mises.x.array.max())
 
-        with io.XDMFFile(domain.comm, out_file, "w") as xdmf:
-            xdmf.write_mesh(domain)
-            xdmf.write_function(u_out)
-            xdmf.write_function(von_mises)
+        # One grid carrying both fields; XDMFFile would write a separate mesh copy per function.
+        with io.VTKFile(domain.comm, out_file, "w") as vtk:
+            vtk.write_function([u_out, von_mises])
         logger.success("Wrote {}", out_file)
