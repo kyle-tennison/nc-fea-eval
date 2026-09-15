@@ -8,7 +8,8 @@ docker build -t fea-eval .
 docker run --rm -v "$PWD:/work" fea-eval input.toml -o results
 ```
 
-Open `results/named-faces.pvd` in ParaView.
+Open `results/named-faces.pvd` in ParaView. Per-stage wall time, CPU time and peak
+memory are logged at the end of the run and saved to `results/metrics.json`.
 
 Everything is configured in [`input.toml`](input.toml) (SI units): the STEP path,
 fixed/loaded faces, total load force [N], mesh sizes, and material.

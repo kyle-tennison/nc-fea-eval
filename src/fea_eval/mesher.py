@@ -5,6 +5,7 @@ import numpy as np
 from loguru import logger
 
 from fea_eval.config import MeshConfig
+from fea_eval.profiler import Profiler
 from fea_eval.step import StepFaces
 
 
@@ -23,32 +24,37 @@ class Mesher:
         fixed_faces: list[int],
         load_faces: list[int],
         mesh: MeshConfig,
+        profiler: Profiler,
     ) -> Path:
-        step_vertices, step_all = StepFaces.vertices(step_file, fixed_faces + load_faces)
+        with profiler.stage("read STEP faces"):
+            step_vertices, step_all = StepFaces.vertices(step_file, fixed_faces + load_faces)
 
         gmsh.initialize()
         try:
             gmsh.option.setNumber("General.Terminal", 0)
             gmsh.option.setString("Geometry.OCCTargetUnit", "M")  # keep SI units
 
-            logger.info("Importing {}", step_file.name)
-            gmsh.model.occ.importShapes(str(step_file))
-            gmsh.model.occ.synchronize()
+            with profiler.stage("import geometry + tag faces"):
+                logger.info("Importing {}", step_file.name)
+                gmsh.model.occ.importShapes(str(step_file))
+                gmsh.model.occ.synchronize()
 
-            surfaces = cls._match_surfaces(step_vertices, step_all)
-            for name, ids in ((cls.FIXED, fixed_faces), (cls.LOAD, load_faces)):
-                tags = [surfaces[i] for i in ids]
-                logger.info("{} faces: {}", name, ", ".join(f"#{i} -> surface {surfaces[i]}" for i in ids))
-                gmsh.model.addPhysicalGroup(2, tags, name=name)
-            volumes = [tag for _, tag in gmsh.model.getEntities(3)]
-            gmsh.model.addPhysicalGroup(3, volumes, name=cls.VOLUME)
+                surfaces = cls._match_surfaces(step_vertices, step_all)
+                for name, ids in ((cls.FIXED, fixed_faces), (cls.LOAD, load_faces)):
+                    tags = [surfaces[i] for i in ids]
+                    logger.info("{} faces: {}", name, ", ".join(f"#{i} -> surface {surfaces[i]}" for i in ids))
+                    gmsh.model.addPhysicalGroup(2, tags, name=name)
+                volumes = [tag for _, tag in gmsh.model.getEntities(3)]
+                gmsh.model.addPhysicalGroup(3, volumes, name=cls.VOLUME)
 
             gmsh.option.setNumber("Mesh.MeshSizeMin", mesh.size_min)
             gmsh.option.setNumber("Mesh.MeshSizeMax", mesh.size_max)
-            gmsh.model.mesh.generate(3)
+            with profiler.stage("generate mesh"):
+                gmsh.model.mesh.generate(3)
             logger.info("Meshed {} nodes", len(gmsh.model.mesh.getNodes()[0]))
 
-            gmsh.write(str(msh_file))
+            with profiler.stage("write mesh"):
+                gmsh.write(str(msh_file))
             return msh_file
         finally:
             gmsh.finalize()

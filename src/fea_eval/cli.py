@@ -5,6 +5,8 @@ from typing import Annotated
 import typer
 from loguru import logger
 
+from fea_eval.profiler import Profiler
+
 
 class Cli:
     @staticmethod
@@ -13,17 +15,24 @@ class Cli:
         output: Annotated[Path, typer.Option("--output", "-o", help="Output directory")] = Path("results"),
     ) -> None:
         """Mesh the STEP file from INPUT_FILE, fix/load its faces, and write a ParaView result."""
+        profiler = Profiler()
+
         # Deferred so `--help` is fast and doesn't need dolfinx.
-        from fea_eval.config import Config
-        from fea_eval.mesher import Mesher
-        from fea_eval.solver import Solver
+        with profiler.stage("import libraries"):
+            from fea_eval.config import Config
+            from fea_eval.mesher import Mesher
+            from fea_eval.solver import Solver
 
         config = Config.from_toml(input_file)
         output.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="fea-") as tmp:
             logger.info("Working in {}", tmp)
-            msh = Mesher.mesh(config.step_file, Path(tmp) / "mesh.msh", config.fixed_faces, config.load_faces, config.mesh)
-            result = Solver.solve(msh, output / f"{config.step_file.stem}.pvd", config.force, config.material)
+            msh = Mesher.mesh(
+                config.step_file, Path(tmp) / "mesh.msh", config.fixed_faces, config.load_faces, config.mesh, profiler
+            )
+            result = Solver.solve(msh, output / f"{config.step_file.stem}.pvd", config.force, config.material, profiler)
+
+        profiler.report(output / "metrics.json")
         logger.success("Done. Open {} in ParaView", result)
 
     @classmethod

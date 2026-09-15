@@ -9,6 +9,7 @@ from mpi4py import MPI
 
 from fea_eval.config import MaterialConfig, Vec3
 from fea_eval.mesher import Mesher
+from fea_eval.profiler import Profiler
 
 
 class Solver:
@@ -21,50 +22,55 @@ class Solver:
         out_file: Path,
         force: Vec3,
         material: MaterialConfig,
+        profiler: Profiler,
         degree: int = 2,
     ) -> Path:
-        data = io.gmsh.read_from_msh(msh_file, MPI.COMM_WORLD, rank=0, gdim=3)
+        with profiler.stage("read mesh"):
+            data = io.gmsh.read_from_msh(msh_file, MPI.COMM_WORLD, rank=0, gdim=3)
         domain, facet_tags = data.mesh, data.facet_tags
         fixed_tag = data.physical_groups[Mesher.FIXED].tag
         load_tag = data.physical_groups[Mesher.LOAD].tag
         logger.info("Loaded mesh with {} cells", domain.topology.index_map(3).size_global)
 
-        V = fem.functionspace(domain, ("Lagrange", degree, (3,)))
+        with profiler.stage("setup + compile forms"):
+            V = fem.functionspace(domain, ("Lagrange", degree, (3,)))
 
-        fdim = domain.topology.dim - 1
-        fixed_dofs = fem.locate_dofs_topological(V, fdim, facet_tags.find(fixed_tag))
-        bc = fem.dirichletbc(np.zeros(3), fixed_dofs, V)
+            fdim = domain.topology.dim - 1
+            fixed_dofs = fem.locate_dofs_topological(V, fdim, facet_tags.find(fixed_tag))
+            bc = fem.dirichletbc(np.zeros(3), fixed_dofs, V)
 
-        E, nu = material.youngs_modulus, material.poisson_ratio
-        mu = E / (2 * (1 + nu))
-        lmbda = E * nu / ((1 + nu) * (1 - 2 * nu))
+            E, nu = material.youngs_modulus, material.poisson_ratio
+            mu = E / (2 * (1 + nu))
+            lmbda = E * nu / ((1 + nu) * (1 - 2 * nu))
 
-        def sigma(w):
-            eps = ufl.sym(ufl.grad(w))
-            return 2 * mu * eps + lmbda * ufl.tr(eps) * ufl.Identity(3)
+            def sigma(w):
+                eps = ufl.sym(ufl.grad(w))
+                return 2 * mu * eps + lmbda * ufl.tr(eps) * ufl.Identity(3)
 
-        u, v = ufl.TrialFunction(V), ufl.TestFunction(V)
-        ds = ufl.Measure("ds", domain=domain, subdomain_data=facet_tags)
-        area = fem.assemble_scalar(fem.form(fem.Constant(domain, 1.0) * ds(load_tag)))
-        traction = np.asarray(force, dtype=np.float64) / area
-        logger.info("Load area {:.4e} m^2 -> traction {} Pa", area, np.array2string(traction, precision=4))
-        t = fem.Constant(domain, traction)
+            u, v = ufl.TrialFunction(V), ufl.TestFunction(V)
+            ds = ufl.Measure("ds", domain=domain, subdomain_data=facet_tags)
+            area = fem.assemble_scalar(fem.form(fem.Constant(domain, 1.0) * ds(load_tag)))
+            traction = np.asarray(force, dtype=np.float64) / area
+            logger.info("Load area {:.4e} m^2 -> traction {} Pa", area, np.array2string(traction, precision=4))
+            t = fem.Constant(domain, traction)
 
-        a = ufl.inner(sigma(u), ufl.grad(v)) * ufl.dx
-        L = ufl.dot(t, v) * ds(load_tag)
+            a = ufl.inner(sigma(u), ufl.grad(v)) * ufl.dx
+            L = ufl.dot(t, v) * ds(load_tag)
 
-        logger.info("Solving ({} dofs)", V.dofmap.index_map.size_global * 3)
-        problem = LinearProblem(
-            a,
-            L,
-            bcs=[bc],
-            petsc_options_prefix="fea_",
-            petsc_options={"ksp_type": "preonly", "pc_type": "lu", "pc_factor_mat_solver_type": "mumps"},
-        )
-        uh = problem.solve()
+            logger.info("Solving ({} dofs)", V.dofmap.index_map.size_global * 3)
+            problem = LinearProblem(
+                a,
+                L,
+                bcs=[bc],
+                petsc_options_prefix="fea_",
+                petsc_options={"ksp_type": "preonly", "pc_type": "lu", "pc_factor_mat_solver_type": "mumps"},
+            )
+        with profiler.stage("assemble + solve"):
+            uh = problem.solve()
         logger.info("Max displacement: {:.4e} m", np.linalg.norm(uh.x.array.reshape(-1, 3), axis=1).max())
 
-        cls._write(uh, sigma, out_file)
+        with profiler.stage("post-process + write"):
+            cls._write(uh, sigma, out_file)
         return out_file
 
     @staticmethod
