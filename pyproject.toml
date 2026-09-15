@@ -1,0 +1,18 @@
+[project]
+name = "fea-eval"
+version = "0.1.0"
+description = "Dead-simple STEP -> gmsh -> dolfinx linear elasticity pipeline"
+requires-python = ">=3.12"
+# dolfinx, gmsh, numpy, mpi4py and petsc4py are provided by the dolfinx/dolfinx
+# Docker image (dolfinx is not on PyPI). Only list what the image lacks.
+dependencies = [
+    "loguru>=0.7",
+    "typer>=0.12",
+]
+
+[project.scripts]
+fea-pipeline = "fea_eval.cli:Cli.run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
