@@ -21,8 +21,8 @@ class Mesher:
         cls,
         step_file: Path,
         msh_file: Path,
-        fixed_faces: list[int],
-        load_faces: list[int],
+        fixed_faces: list[str],
+        load_faces: list[str],
         mesh: MeshConfig,
         profiler: Profiler,
     ) -> Path:
@@ -42,7 +42,7 @@ class Mesher:
                 surfaces = cls._match_surfaces(step_vertices, step_all)
                 for name, ids in ((cls.FIXED, fixed_faces), (cls.LOAD, load_faces)):
                     tags = [surfaces[i] for i in ids]
-                    logger.info("{} faces: {}", name, ", ".join(f"#{i} -> surface {surfaces[i]}" for i in ids))
+                    logger.info("{} faces: {}", name, ", ".join(f"{i} -> surface {surfaces[i]}" for i in ids))
                     gmsh.model.addPhysicalGroup(2, tags, name=name)
                 volumes = [tag for _, tag in gmsh.model.getEntities(3)]
                 gmsh.model.addPhysicalGroup(3, volumes, name=cls.VOLUME)
@@ -60,10 +60,10 @@ class Mesher:
             gmsh.finalize()
 
     @staticmethod
-    def _match_surfaces(step_vertices: dict[int, np.ndarray], step_all: np.ndarray) -> dict[int, int]:
-        """Map STEP face IDs to gmsh surface tags by comparing their vertex sets.
+    def _match_surfaces(step_vertices: dict[str, np.ndarray], step_all: np.ndarray) -> dict[str, int]:
+        """Map STEP face names to gmsh surface tags by comparing their vertex sets.
 
-        gmsh doesn't keep STEP entity IDs, but a face's corners identify it.
+        gmsh doesn't import STEP face names, but a face's vertices identify it.
         """
         gmsh_all = np.array([gmsh.model.getValue(0, tag, []) for _, tag in gmsh.model.getEntities(0)])
         span = np.ptp(gmsh_all, axis=0).max()
@@ -82,10 +82,10 @@ class Mesher:
             return len(np.unique(b, axis=0)) == len(a) and bool((d.min(axis=1) < tol).all())
 
         result = {}
-        for face_id, verts in step_vertices.items():
+        for name, verts in step_vertices.items():
             verts = scale * verts
             matches = [tag for tag, sv in surface_vertices.items() if same(verts, sv)]
             if len(matches) != 1:
-                raise RuntimeError(f"STEP face #{face_id} matched gmsh surfaces {matches}; expected exactly one")
-            result[face_id] = matches[0]
+                raise RuntimeError(f"STEP face {name!r} matched gmsh surfaces {matches}; expected exactly one")
+            result[name] = matches[0]
         return result

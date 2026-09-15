@@ -5,7 +5,7 @@ import numpy as np
 
 
 class StepFaces:
-    """Minimal STEP reader: resolves face entity IDs (e.g. #98) to their B-rep vertex coordinates."""
+    """Minimal STEP reader: resolves face names (e.g. `f_4` in `ADVANCED_FACE('f_4',...)`) to their vertex coordinates."""
 
     FACE_TYPES = frozenset({"ADVANCED_FACE", "FACE_SURFACE"})
     # Topology walked from a face down to its vertices; geometry (PLANE, LINE, ...) is skipped.
@@ -13,24 +13,37 @@ class StepFaces:
 
     ENTITY = re.compile(r"#(\d+)\s*=\s*([A-Z0-9_]+)\s*\((.*)\)\s*$", re.DOTALL)
     REF = re.compile(r"#(\d+)")
+    NAME = re.compile(r"\s*'((?:[^']|'')*)'")  # leading STEP string argument; '' escapes a quote
 
     @classmethod
-    def vertices(cls, step_file: Path, face_ids: list[int]) -> tuple[dict[int, np.ndarray], np.ndarray]:
-        """Map each face ID to an (n, 3) array of its vertex coordinates, plus all vertices of the part.
+    def vertices(cls, step_file: Path, names: list[str]) -> tuple[dict[str, np.ndarray], np.ndarray]:
+        """Map each face name to an (n, 3) array of its vertex coordinates, plus all vertices of the part.
 
         Coordinates are in STEP file units.
         """
         entities = cls._parse(step_file)
 
-        faces = sorted(i for i, (kind, _) in entities.items() if kind in cls.FACE_TYPES)
+        faces: dict[str, list[int]] = {}
+        for eid, (kind, args) in entities.items():
+            if kind in cls.FACE_TYPES and (m := cls.NAME.match(args)) and m[1]:
+                faces.setdefault(m[1].replace("''", "'"), []).append(eid)
+
         result = {}
-        for face_id in face_ids:
-            if face_id not in faces:
-                kind = entities.get(face_id, ("missing",))[0]
-                raise ValueError(f"STEP #{face_id} is {kind}, not a face. Face IDs: {faces}")
-            result[face_id] = cls._face_vertices(entities, face_id)
+        for name in names:
+            match faces.get(name, []):
+                case [face_id]:
+                    result[name] = cls._face_vertices(entities, face_id)
+                case []:
+                    raise ValueError(f"No STEP face named {name!r}. Face names: {sorted(faces, key=cls._natural)}")
+                case ids:
+                    raise ValueError(f"STEP face name {name!r} is used by several faces: {['#' + str(i) for i in ids]}")
         everything = np.array([cls._point(entities, i) for i, (kind, _) in entities.items() if kind == "VERTEX_POINT"])
         return result, everything
+
+    @staticmethod
+    def _natural(name: str) -> list[int | str]:
+        """Sort key so f_2 comes before f_10."""
+        return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", name)]
 
     @classmethod
     def _parse(cls, step_file: Path) -> dict[int, tuple[str, str]]:

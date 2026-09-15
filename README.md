@@ -8,11 +8,12 @@ docker build -t fea-eval .
 docker run --rm -v "$PWD:/work" fea-eval input.toml -o results
 ```
 
-Open `results/named-faces.pvd` in ParaView. Per-stage wall time, CPU time and peak
+Open `results/<step name>.pvd` in ParaView. Per-stage wall time, CPU time and peak
 memory are logged at the end of the run and saved to `results/metrics.json`.
 
 Everything is configured in [`input.toml`](input.toml) (SI units): the STEP path,
 fixed/loaded faces, total load force [N], mesh sizes, and material.
 
-Faces are STEP `ADVANCED_FACE` entity IDs (the `#98` in `#98=ADVANCED_FACE(...)`).
-gmsh drops these IDs, so each is matched to a gmsh surface by its vertex coordinates.
+Faces are referenced by their STEP name (the `f_4` in `#555 = ADVANCED_FACE('f_4',...)`);
+see [`input-template.toml`](input-template.toml). gmsh doesn't import face names, so each
+named face is matched to a gmsh surface by its vertex coordinates.

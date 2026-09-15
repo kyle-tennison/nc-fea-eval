@@ -1,0 +1,18 @@
+# SI units throughout: m, N, Pa.
+
+step_file = "part.step"  # relative to this file
+
+[fixed]
+faces = ["f_0"]  # STEP face names, as in ADVANCED_FACE('f_0', ...)
+
+[load]
+faces = ["f_1"]
+force = [0.0, 0.0, -400.0]  # total force [N], spread uniformly over the faces
+
+[mesh]
+size_min = 0.001  # [m]
+size_max = 0.005  # [m]
+
+[material]  # steel
+youngs_modulus = 200e9  # [Pa]
+poisson_ratio = 0.3

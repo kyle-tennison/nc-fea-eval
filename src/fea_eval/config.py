@@ -22,8 +22,8 @@ class Config:
     """Contents of an `input.toml`. SI units throughout (m, N, Pa)."""
 
     step_file: Path
-    fixed_faces: list[int]
-    load_faces: list[int]
+    fixed_faces: list[str]  # STEP face names, e.g. "f_4"
+    load_faces: list[str]
     force: Vec3
     mesh: MeshConfig
     material: MaterialConfig
@@ -39,9 +39,15 @@ class Config:
 
         return cls(
             step_file=(path.parent / raw["step_file"]).resolve(),  # relative to the toml
-            fixed_faces=list(raw["fixed"]["faces"]),
-            load_faces=list(raw["load"]["faces"]),
+            fixed_faces=cls._names(raw["fixed"]["faces"], "fixed.faces"),
+            load_faces=cls._names(raw["load"]["faces"], "load.faces"),
             force=force,
             mesh=MeshConfig(**raw["mesh"]),
             material=MaterialConfig(**raw["material"]),
         )
+
+    @staticmethod
+    def _names(value: object, key: str) -> list[str]:
+        if not isinstance(value, list) or not value or not all(isinstance(v, str) for v in value):
+            raise ValueError(f'{key} must be a non-empty list of STEP face names, e.g. ["f_4"]; got {value!r}')
+        return value
