@@ -4,9 +4,9 @@ import gmsh
 import numpy as np
 from loguru import logger
 
-from fea_eval.config import MeshConfig
-from fea_eval.profiler import Profiler
-from fea_eval.step import StepFaces
+from nc_fea_eval.config import MeshConfig
+from nc_fea_eval.profiler import Profiler
+from nc_fea_eval.step import StepFaces
 
 
 class Mesher:

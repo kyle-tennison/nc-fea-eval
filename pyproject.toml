@@ -1,5 +1,5 @@
 [project]
-name = "fea-eval"
+name = "nc-fea-eval"
 version = "0.1.0"
 description = "Dead-simple STEP -> gmsh -> dolfinx linear elasticity pipeline"
 requires-python = ">=3.12"
@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-fea-pipeline = "fea_eval.cli:Cli.run"
+fea-pipeline = "nc_fea_eval.cli:Cli.run"
 
 [build-system]
 requires = ["hatchling"]

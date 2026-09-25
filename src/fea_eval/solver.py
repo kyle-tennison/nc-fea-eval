@@ -7,9 +7,9 @@ from dolfinx.fem.petsc import LinearProblem
 from loguru import logger
 from mpi4py import MPI
 
-from fea_eval.config import MaterialConfig, Vec3
-from fea_eval.mesher import Mesher
-from fea_eval.profiler import Profiler
+from nc_fea_eval.config import MaterialConfig, Vec3
+from nc_fea_eval.mesher import Mesher
+from nc_fea_eval.profiler import Profiler
 
 
 class Solver:

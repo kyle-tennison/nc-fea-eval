@@ -5,7 +5,7 @@ from typing import Annotated
 import typer
 from loguru import logger
 
-from fea_eval.profiler import Profiler
+from nc_fea_eval.profiler import Profiler
 
 
 class Cli:
@@ -19,9 +19,9 @@ class Cli:
 
         # Deferred so `--help` is fast and doesn't need dolfinx.
         with profiler.stage("import libraries"):
-            from fea_eval.config import Config
-            from fea_eval.mesher import Mesher
-            from fea_eval.solver import Solver
+            from nc_fea_eval.config import Config
+            from nc_fea_eval.mesher import Mesher
+            from nc_fea_eval.solver import Solver
 
         config = Config.from_toml(input_file)
         output.mkdir(parents=True, exist_ok=True)
