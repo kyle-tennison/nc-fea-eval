@@ -30,7 +30,7 @@ class Cli:
             msh = Mesher.mesh(
                 config.step_file, Path(tmp) / "mesh.msh", config.fixed_faces, config.load_faces, config.mesh, profiler
             )
-            result = Solver.solve(msh, output / f"{config.step_file.stem}.pvd", config.force, config.material, profiler)
+            result = Solver.solve(msh, output / f"{config.step_file.stem}.pvd", config.load, config.material, profiler)
 
         profiler.report(output / "metrics.json")
         logger.success("Done. Open {} in ParaView", result)
