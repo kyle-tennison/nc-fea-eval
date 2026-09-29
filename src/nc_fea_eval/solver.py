@@ -7,20 +7,21 @@ from dolfinx.fem.petsc import LinearProblem
 from loguru import logger
 from mpi4py import MPI
 
-from nc_fea_eval.config import MaterialConfig, Vec3
+from nc_fea_eval.config import LoadConfig, MaterialConfig
+from nc_fea_eval.load import LoadFaces
 from nc_fea_eval.mesher import Mesher
 from nc_fea_eval.profiler import Profiler
 
 
 class Solver:
-    """Linear elasticity: clamp some faces, spread a total force uniformly over others."""
+    """Linear elasticity: clamp some faces, load others with a force, torque or pressure."""
 
     @classmethod
     def solve(
         cls,
         msh_file: Path,
         out_file: Path,
-        force: Vec3,
+        load: LoadConfig,
         material: MaterialConfig,
         profiler: Profiler,
         degree: int = 2,
@@ -49,10 +50,8 @@ class Solver:
 
             u, v = ufl.TrialFunction(V), ufl.TestFunction(V)
             ds = ufl.Measure("ds", domain=domain, subdomain_data=facet_tags)
-            area = fem.assemble_scalar(fem.form(fem.Constant(domain, 1.0) * ds(load_tag)))
-            traction = np.asarray(force, dtype=np.float64) / area
-            logger.info("Load area {:.4e} m^2 -> traction {} Pa", area, np.array2string(traction, precision=4))
-            t = fem.Constant(domain, traction)
+            faces = LoadFaces(domain, ds(load_tag), load)
+            t = faces.traction()
 
             a = ufl.inner(sigma(u), ufl.grad(v)) * ufl.dx
             L = ufl.dot(t, v) * ds(load_tag)
@@ -71,6 +70,7 @@ class Solver:
 
         with profiler.stage("post-process + write"):
             cls._write(uh, sigma, out_file)
+            faces.write_response(uh, out_file.parent / "load_faces.json")
         return out_file
 
     @staticmethod

@@ -7,7 +7,10 @@ faces = ["f_0"]  # STEP face names, as in ADVANCED_FACE('f_0', ...)
 
 [load]
 faces = ["f_1"]
+# Exactly one of:
 force = [0.0, 0.0, -400.0]  # total force [N], spread uniformly over the faces
+# torque = [10.0, 0.0, 0.0]  # [N m] about the faces' centroid; also writes their twist to load_faces.json
+# pressure = 1e6  # [Pa], normal to the faces, pushing into the part
 
 [mesh]
 size_min = 0.001  # [m]
