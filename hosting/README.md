@@ -44,12 +44,15 @@ curl -H "Authorization: Bearer $FEA_CLIENT_TOKEN" -o result.zip https://52-37-24
    [`deploy/nginx.conf`](proxy/deploy/nginx.conf), then run `certbot --nginx -d <name> --redirect` for TLS.
    Uvicorn only listens on localhost.
 
-**Dispatcher (campus):**
+**Dispatcher (campus):** from the repo checkout on the campus machine, run
 
-1. Build the image from the repo root with `docker build -t fea-eval .`.
-2. Run `uv sync --frozen --no-dev` in `hosting/dispatch`.
-3. Write `/etc/fea-dispatch.env` with `FEA_PROXY_URL` and `FEA_WORKER_TOKEN`.
-4. Install [`deploy/fea-dispatch.service`](dispatch/deploy/fea-dispatch.service). Or just
-   `uv run fea-dispatch --help`.
+```bash
+hosting/dispatch/deploy/install.sh
+```
+
+It builds the `fea-eval` image, installs the dispatcher, asks for the worker token once (saved to
+`/etc/fea-dispatch.env`), checks it against the proxy, and installs a `fea-dispatch` systemd service that
+starts on boot. Without sudo it falls back to a user service with lingering. After a `git pull`, re-run it
+to update.
 
 Job files live under `FEA_DATA_DIR/jobs/<id>/` forever; prune old ones with a cron job if disk gets tight.
