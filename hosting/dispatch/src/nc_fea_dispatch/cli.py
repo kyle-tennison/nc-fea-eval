@@ -30,9 +30,16 @@ class Cli:
         docker_arg: Annotated[
             list[str] | None, typer.Option(help="Extra `docker run` argument, repeatable (e.g. --docker-arg=--cpus=8)")
         ] = None,
+        gpus: Annotated[
+            str,
+            typer.Option(
+                envvar="FEA_GPUS",
+                help="`docker run --gpus` value: auto (use them if the host can expose any), none, all, or e.g. device=1",
+            ),
+        ] = "auto",
     ) -> None:
         """Poll the proxy for fea-eval jobs and run them locally in Docker."""
-        runner = Runner(image, timeout * 60, heartbeat, docker_arg or [])
+        runner = Runner(image, timeout * 60, heartbeat, docker_arg or [], gpus)
         Dispatcher(
             ProxyClient(url, token), runner, work_dir, hot_interval, idle_interval, hot_window * 60
         ).run_forever()

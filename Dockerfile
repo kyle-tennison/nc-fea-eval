@@ -9,7 +9,7 @@ ENV UV_PROJECT_ENVIRONMENT=/dolfinx-env \
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY src ./src
-RUN uv sync --frozen --inexact --no-dev
+RUN uv sync --frozen --inexact --no-dev --extra gpu
 
 WORKDIR /work
 ENTRYPOINT ["fea-pipeline"]
