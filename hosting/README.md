@@ -28,20 +28,21 @@ client ──HTTPS──▶ proxy (Lightsail, SQLite + disk) ◀──HTTPS poll
 | `POST /worker/jobs/{id}/{heartbeat,complete,fail}` | worker | Lease token in `X-Lease` |
 
 ```bash
-curl -H "Authorization: Bearer $FEA_CLIENT_TOKEN" -F input=@input.toml -F step=@part.step https://fea.example.com/jobs
-curl -H "Authorization: Bearer $FEA_CLIENT_TOKEN" https://fea.example.com/jobs/<id>
-curl -H "Authorization: Bearer $FEA_CLIENT_TOKEN" -o result.zip https://fea.example.com/jobs/<id>/result
+curl -H "Authorization: Bearer $FEA_CLIENT_TOKEN" -F input=@input.toml -F step=@part.step https://52-37-243-198.sslip.io/jobs
+curl -H "Authorization: Bearer $FEA_CLIENT_TOKEN" https://52-37-243-198.sslip.io/jobs/<id>
+curl -H "Authorization: Bearer $FEA_CLIENT_TOKEN" -o result.zip https://52-37-243-198.sslip.io/jobs/<id>/result
 ```
 
 ## Deploying
 
-**Proxy (Lightsail):** open 80/443 in the Lightsail firewall and point a DNS name at the static IP.
+**Proxy (Lightsail):** deployed at `https://52-37-243-198.sslip.io`, behind the box's existing nginx.
 
 1. Clone the repo to `/opt/fea-eval`, install `uv`, then run `uv sync --frozen --no-dev` in `hosting/proxy`.
 2. Write `/etc/fea-proxy.env` with `FEA_CLIENT_TOKEN`, `FEA_WORKER_TOKEN` (generate them with
    `openssl rand -hex 32`) and `FEA_DATA_DIR=/var/lib/fea-proxy`.
 3. Install [`deploy/fea-proxy.service`](proxy/deploy/fea-proxy.service) and
-   [`deploy/Caddyfile`](proxy/deploy/Caddyfile) (Caddy handles TLS). Uvicorn only listens on localhost.
+   [`deploy/nginx.conf`](proxy/deploy/nginx.conf), then run `certbot --nginx -d <name> --redirect` for TLS.
+   Uvicorn only listens on localhost.
 
 **Dispatcher (campus):**
 

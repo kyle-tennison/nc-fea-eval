@@ -9,7 +9,8 @@ User=fea
 WorkingDirectory=/opt/fea-eval/hosting/proxy
 # FEA_CLIENT_TOKEN, FEA_WORKER_TOKEN, FEA_DATA_DIR, ...
 EnvironmentFile=/etc/fea-proxy.env
-ExecStart=/usr/local/bin/uv run --frozen --no-dev uvicorn nc_fea_proxy.app:create_app --factory --host 127.0.0.1 --port 8000
+# The venv from `uv sync --frozen --no-dev`; uv isn't needed at runtime.
+ExecStart=/opt/fea-eval/hosting/proxy/.venv/bin/uvicorn nc_fea_proxy.app:create_app --factory --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=2
 

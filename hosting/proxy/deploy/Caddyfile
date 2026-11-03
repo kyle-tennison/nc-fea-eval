@@ -1,7 +1,0 @@
-# /etc/caddy/Caddyfile — TLS in front of the proxy so bearer tokens never cross the wire in clear.
-fea.example.com {
-	request_body {
-		max_size 256MB
-	}
-	reverse_proxy 127.0.0.1:8000
-}

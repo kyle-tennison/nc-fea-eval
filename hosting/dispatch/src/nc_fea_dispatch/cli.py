@@ -14,7 +14,9 @@ DEFAULT_WORK_DIR = Path(tempfile.gettempdir(), "fea-dispatch")
 class Cli:
     @staticmethod
     def dispatch(
-        url: Annotated[str, typer.Option(envvar="FEA_PROXY_URL", help="Proxy base URL, e.g. https://fea.example.com")],
+        url: Annotated[
+            str, typer.Option(envvar="FEA_PROXY_URL", help="Proxy base URL, e.g. https://52-37-243-198.sslip.io")
+        ],
         token: Annotated[str, typer.Option(envvar="FEA_WORKER_TOKEN", help="Worker bearer token")],
         image: Annotated[str, typer.Option(envvar="FEA_IMAGE", help="fea-eval Docker image")] = "fea-eval",
         work_dir: Annotated[Path, typer.Option(help="Where job directories are staged")] = DEFAULT_WORK_DIR,
