@@ -1,0 +1,15 @@
+[project]
+name = "nc-fea-proxy"
+version = "0.1.0"
+description = "Public job queue that the campus dispatcher polls for fea-eval runs"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "loguru>=0.7",
+    "python-multipart>=0.0.9",
+    "uvicorn>=0.30",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
