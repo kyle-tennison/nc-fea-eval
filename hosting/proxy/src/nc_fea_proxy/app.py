@@ -62,6 +62,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def lease_lost() -> HTTPException:
         return HTTPException(status.HTTP_409_CONFLICT, "lease is no longer held")
 
+    @app.get("/", include_in_schema=False)
+    def index() -> FileResponse:
+        return FileResponse(Path(__file__).with_name("index.html"))
+
     @app.get("/healthz")
     def healthz() -> dict:
         return {"ok": True}

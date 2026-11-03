@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fea-eval</title>
+<style>
+  body { font: 16px system-ui, sans-serif; max-width: 32rem; margin: 2rem auto; padding: 0 1rem; }
+  label { display: block; margin: 1rem 0 0.25rem; }
+  button { margin-top: 1rem; }
+  pre { white-space: pre-wrap; background: #f4f4f4; padding: 0.5rem; }
+</style>
+<h1>fea-eval</h1>
+<form id="form">
+  <label>Token <input id="token" type="password" required></label>
+  <label>STEP file <input id="step" type="file" accept=".step,.stp" required></label>
+  <label>Input TOML <input id="input" type="file" accept=".toml" required></label>
+  <button>Run</button>
+</form>
+<p id="status"></p>
+<pre id="log" hidden></pre>
+<script>
+  const $ = (id) => document.getElementById(id);
+  $("token").value = localStorage.getItem("token") || "";
+  const auth = () => ({ Authorization: "Bearer " + $("token").value });
+  const show = (text) => ($("status").textContent = text);
+
+  $("form").onsubmit = async (event) => {
+    event.preventDefault();
+    localStorage.setItem("token", $("token").value);
+    $("log").hidden = true;
+    const body = new FormData();
+    body.append("step", $("step").files[0]);
+    body.append("input", $("input").files[0]);
+    const response = await fetch("/jobs", { method: "POST", headers: auth(), body });
+    const job = await response.json();
+    if (!response.ok) return show("Error: " + JSON.stringify(job.detail));
+    poll(job.id);
+  };
+
+  async function poll(id) {
+    const job = await (await fetch("/jobs/" + id, { headers: auth() })).json();
+    show("Job " + id.slice(0, 8) + ": " + job.status);
+    if (job.status === "done") {
+      const zip = await (await fetch("/jobs/" + id + "/result", { headers: auth() })).blob();
+      const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(zip), download: id + ".zip" });
+      link.textContent = "Download results";
+      $("status").append(" — ", link);
+    } else if (job.status === "failed") {
+      show("Failed: " + job.error);
+      $("log").textContent = await (await fetch("/jobs/" + id + "/log", { headers: auth() })).text();
+      $("log").hidden = false;
+    } else {
+      setTimeout(() => poll(id), 2000);
+    }
+  }
+</script>
