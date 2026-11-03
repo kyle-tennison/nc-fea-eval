@@ -16,6 +16,7 @@
   <button>Run</button>
 </form>
 <p id="status"></p>
+<p id="clock"></p>
 <pre id="log" hidden></pre>
 <script>
   const $ = (id) => document.getElementById(id);
@@ -23,21 +24,30 @@
   const auth = () => ({ Authorization: "Bearer " + $("token").value });
   const show = (text) => ($("status").textContent = text);
 
+  // Stopwatch from when the dispatcher claimed the job until it finished.
+  let job = null;
+  setInterval(() => {
+    if (!job?.started_at) return ($("clock").textContent = "");
+    const end = job.finished_at ? Date.parse(job.finished_at) : Date.now();
+    $("clock").textContent = ((end - Date.parse(job.started_at)) / 1000).toFixed(1) + " s";
+  }, 100);
+
   $("form").onsubmit = async (event) => {
     event.preventDefault();
     localStorage.setItem("token", $("token").value);
     $("log").hidden = true;
+    job = null;
     const body = new FormData();
     body.append("step", $("step").files[0]);
     body.append("input", $("input").files[0]);
     const response = await fetch("/jobs", { method: "POST", headers: auth(), body });
-    const job = await response.json();
-    if (!response.ok) return show("Error: " + JSON.stringify(job.detail));
-    poll(job.id);
+    const created = await response.json();
+    if (!response.ok) return show("Error: " + JSON.stringify(created.detail));
+    poll(created.id);
   };
 
   async function poll(id) {
-    const job = await (await fetch("/jobs/" + id, { headers: auth() })).json();
+    job = await (await fetch("/jobs/" + id, { headers: auth() })).json();
     show("Job " + id.slice(0, 8) + ": " + job.status);
     if (job.status === "done") {
       const zip = await (await fetch("/jobs/" + id + "/result", { headers: auth() })).blob();
